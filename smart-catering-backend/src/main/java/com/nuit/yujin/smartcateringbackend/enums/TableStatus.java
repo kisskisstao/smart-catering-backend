@@ -1,8 +1,8 @@
 package com.nuit.yujin.smartcateringbackend.enums;
 
 public enum TableStatus {
-    AVAILABLE,
-    USING,
+    FREE,
     RESERVED,
-    DISABLED
+    OCCUPIED,
+    DIRTY
 }

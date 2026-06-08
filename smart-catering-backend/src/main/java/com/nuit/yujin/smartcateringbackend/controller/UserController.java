@@ -4,7 +4,14 @@ import com.nuit.yujin.smartcateringbackend.common.Result;
 import com.nuit.yujin.smartcateringbackend.entity.User;
 import com.nuit.yujin.smartcateringbackend.service.UserService;
 import com.nuit.yujin.smartcateringbackend.utils.JwtUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -25,7 +32,8 @@ public class UserController {
         if (params == null) {
             throw new RuntimeException("请求体不能为空");
         }
-        return Result.success(userService.login(params.get("code")));
+        String code = firstNotBlank(params.get("code"), params.get("username"), params.get("account"));
+        return Result.success(userService.login(code));
     }
 
     @GetMapping("/mock-login")
@@ -47,5 +55,14 @@ public class UserController {
         user.setPhone(updateData.getPhone());
         userService.updateById(user);
         return Result.success(null);
+    }
+
+    private String firstNotBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        throw new RuntimeException("登录账号不能为空");
     }
 }

@@ -26,8 +26,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
@@ -58,7 +61,7 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
             throw new RuntimeException("购物车为空");
         }
 
-        DiningTable table = diningTableService.requireUsableTable(dto.getTableId());
+        DiningTable table = diningTableService.requireOrderableTableWithLock(dto.getTableId());
         DiningOrder order = new DiningOrder();
         order.setOrderNo(generateOrderNo());
         order.setUserId(userId);
@@ -76,14 +79,15 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
             Dish dish = dishService.requireAvailableDish(item.getDishId());
             dishService.deductStock(item.getDishId(), item.getQuantity());
 
-            BigDecimal amount = dish.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+            BigDecimal price = dishService.resolveItemPrice(dish, item.getSize());
+            BigDecimal amount = price.multiply(BigDecimal.valueOf(item.getQuantity()));
             totalAmount = totalAmount.add(amount);
 
             DiningOrderItem orderItem = new DiningOrderItem();
             orderItem.setOrderId(order.getId());
             orderItem.setDishId(dish.getId());
             orderItem.setDishName(dish.getName());
-            orderItem.setPrice(dish.getPrice());
+            orderItem.setPrice(price);
             orderItem.setQuantity(item.getQuantity());
             orderItem.setSpicy(item.getSpicy());
             orderItem.setSize(item.getSize());
@@ -94,6 +98,7 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
         order.setTotalAmount(totalAmount);
         order.setUpdateTime(LocalDateTime.now());
         updateById(order);
+        diningTableService.markOccupied(table.getStoreId(), table.getId());
 
         return new CreateOrderResultVO(order.getId(), order.getOrderNo(), totalAmount, order.getStatus(), order.getPayStatus());
     }
@@ -151,6 +156,9 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
         order.setStatus(nextStatus);
         order.setUpdateTime(LocalDateTime.now());
         updateById(order);
+        if (OrderStatus.COMPLETED.name().equals(nextStatus)) {
+            diningTableService.markDirty(order.getStoreId(), order.getTableId());
+        }
 
         OrderStatusChangedMessage message = new OrderStatusChangedMessage(
                 order.getId(), order.getStoreId(), order.getUserId(), nextStatus
@@ -168,7 +176,9 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
         wrapper.eq(DiningOrder::getUserId, userId);
         wrapper.eq(status != null && !"ALL".equals(status), DiningOrder::getStatus, status);
         wrapper.orderByDesc(DiningOrder::getCreateTime);
-        return page(new Page<>(pageNo, pageSize), wrapper);
+        IPage<DiningOrder> result = page(new Page<>(pageNo, pageSize), wrapper);
+        fillOrderItems(result.getRecords());
+        return result;
     }
 
     public IPage<DiningOrder> pageMerchantOrders(Long storeId, String status, Integer pageNo, Integer pageSize) {
@@ -177,6 +187,21 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
         wrapper.eq(status != null && !"ALL".equals(status), DiningOrder::getStatus, status);
         wrapper.orderByDesc(DiningOrder::getCreateTime);
         return page(new Page<>(pageNo, pageSize), wrapper);
+    }
+
+    private void fillOrderItems(List<DiningOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+        List<Long> orderIds = orders.stream().map(DiningOrder::getId).toList();
+        List<DiningOrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<DiningOrderItem>().in(DiningOrderItem::getOrderId, orderIds)
+        );
+        Map<Long, List<DiningOrderItem>> itemMap = items.stream()
+                .collect(Collectors.groupingBy(DiningOrderItem::getOrderId));
+        for (DiningOrder order : orders) {
+            order.setItems(itemMap.getOrDefault(order.getId(), Collections.emptyList()));
+        }
     }
 
     public OrderDetailVO getUserOrderDetail(Long userId, Long orderId) {
@@ -214,6 +239,7 @@ public class OrderService extends ServiceImpl<DiningOrderMapper, DiningOrder> {
         order.setStatus(OrderStatus.CANCELLED.name());
         order.setUpdateTime(LocalDateTime.now());
         updateById(order);
+        diningTableService.markFree(order.getStoreId(), order.getTableId());
 
         OrderStatusChangedMessage message = new OrderStatusChangedMessage(
                 order.getId(), order.getStoreId(), order.getUserId(), order.getStatus()

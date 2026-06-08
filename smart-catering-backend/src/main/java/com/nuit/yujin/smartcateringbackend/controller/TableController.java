@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.List;
 
 @RestController
 public class TableController {
@@ -20,6 +21,18 @@ public class TableController {
         this.diningTableService = diningTableService;
     }
 
+    @GetMapping("/table/list")
+    public Result<List<DiningTable>> list(@RequestParam(defaultValue = "1") Long storeId) {
+        return Result.success(diningTableService.listByStore(storeId));
+    }
+
+    @PutMapping("/table/{id}/status")
+    public Result<DiningTable> updateStatus(@RequestParam(defaultValue = "1") Long storeId,
+                                            @PathVariable Long id,
+                                            @RequestParam String status) {
+        return Result.success(diningTableService.updateStatus(storeId, id, status));
+    }
+
     @GetMapping("/merchant/table/page")
     public Result<IPage<DiningTable>> page(@RequestParam(defaultValue = "1") Long storeId,
                                            @RequestParam(defaultValue = "1") Integer pageNo,
@@ -28,7 +41,8 @@ public class TableController {
     }
 
     @PostMapping("/merchant/table")
-    public Result<Void> create(@RequestParam(defaultValue = "1") Long storeId, @RequestBody DiningTable table) {
+    public Result<Void> create(@RequestParam(defaultValue = "1") Long storeId,
+                               @RequestBody DiningTable table) {
         diningTableService.createTable(storeId, table);
         return Result.success(null);
     }
@@ -42,13 +56,15 @@ public class TableController {
     }
 
     @DeleteMapping("/merchant/table/{id}")
-    public Result<Void> delete(@RequestParam(defaultValue = "1") Long storeId, @PathVariable Long id) {
+    public Result<Void> delete(@RequestParam(defaultValue = "1") Long storeId,
+                               @PathVariable Long id) {
         diningTableService.deleteTable(storeId, id);
         return Result.success(null);
     }
 
     @PostMapping("/merchant/table/{id}/qrcode")
-    public Result<DiningTable> refreshQrCode(@RequestParam(defaultValue = "1") Long storeId, @PathVariable Long id) {
+    public Result<DiningTable> refreshQrCode(@RequestParam(defaultValue = "1") Long storeId,
+                                             @PathVariable Long id) {
         return Result.success(diningTableService.refreshQrCode(storeId, id));
     }
 
@@ -56,10 +72,7 @@ public class TableController {
     public void qrCodeImage(@RequestParam(defaultValue = "1") Long storeId,
                             @PathVariable Long id,
                             HttpServletResponse response) throws IOException {
-        DiningTable table = diningTableService.getById(id);
-        if (table == null || !table.getStoreId().equals(storeId)) {
-            throw new RuntimeException("桌台不存在");
-        }
+        DiningTable table = diningTableService.requireStoreTable(storeId, id);
         if (table.getQrContent() == null || table.getQrContent().isBlank()) {
             table = diningTableService.refreshQrCode(storeId, id);
         }
@@ -69,7 +82,8 @@ public class TableController {
     }
 
     @GetMapping("/table/scan")
-    public Result<TableScanVO> scan(@RequestParam Long tableId, @RequestParam String qrToken) {
+    public Result<TableScanVO> scan(@RequestParam Long tableId,
+                                    @RequestParam String qrToken) {
         return Result.success(diningTableService.scan(tableId, qrToken));
     }
 }

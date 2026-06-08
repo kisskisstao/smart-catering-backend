@@ -1,29 +1,23 @@
 package com.nuit.yujin.smartcateringbackend.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
-@TableName("dining_order")
-public class DiningOrder {
+@TableName("dish_spec")
+public class DishSpec {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String orderNo;
-    private Long userId;
-    private Long storeId;
-    private Long tableId;
+    private Long dishId;
+    private String name;
+    private BigDecimal price;
+    private Integer sort;
     private String status;
-    private String payStatus;
-    private BigDecimal totalAmount;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
-    @TableField(exist = false)
-    private List<DiningOrderItem> items;
 }

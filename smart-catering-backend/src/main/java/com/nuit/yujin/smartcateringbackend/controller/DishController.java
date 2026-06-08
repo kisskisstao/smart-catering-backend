@@ -27,6 +27,6 @@ public class DishController {
 
     @GetMapping("/detail/{id}")
     public Result<Dish> detail(@PathVariable Long id) {
-        return Result.success(dishService.getById(id));
+        return Result.success(dishService.detail(id));
     }
 }
